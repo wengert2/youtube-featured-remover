@@ -4,6 +4,7 @@
   const api = globalThis.browser ?? globalThis.chrome;
   const toggle = document.getElementById('toggle');
   const status = document.getElementById('status');
+  const closeButton = document.getElementById('close');
 
   function setStatus(on) {
     status.textContent = on
@@ -11,9 +12,9 @@
       : 'Hiding featured videos: OFF';
   }
 
-  function applyAndClose(on) {
+  function apply(on) {
     setStatus(on);
-    api.storage.local.set({ enabled: on }, () => window.close());
+    api.storage.local.set({ enabled: on });
   }
 
   api.storage.local.get('enabled', (result) => {
@@ -22,5 +23,6 @@
     setStatus(on);
   });
 
-  toggle.addEventListener('change', () => applyAndClose(toggle.checked));
+  toggle.addEventListener('change', () => apply(toggle.checked));
+  closeButton.addEventListener('click', () => window.close());
 })();
