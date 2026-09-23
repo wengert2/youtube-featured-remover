@@ -1,6 +1,6 @@
 # YouTube Featured Remover
 
-A Manifest V3 browser extension that hides "YouTube featured" (promoted) cards on YouTube. Works in both Chrome and Firefox from a single codebase.
+A Manifest V3 browser extension that hides "YouTube featured" (promoted) cards on YouTube.
 
 ## Features
 
