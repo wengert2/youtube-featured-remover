@@ -5,15 +5,29 @@
   const BADGE_TEXT = 'youtube featured';
 
   const CARD_SELECTORS = [
+    'yt-lockup-view-model',
     'ytd-compact-promoted-video-renderer',
+    'ytd-compact-video-renderer',
     'ytd-promoted-video-renderer',
     'ytd-ad-slot-renderer',
     'ytd-statement-banner-renderer',
     'ytd-rich-item-renderer',
+    'ytd-rich-grid-slim-media',
     'ytd-grid-video-renderer',
     'ytd-video-renderer',
-    'ytd-compact-video-renderer',
     'ytd-playlist-video-renderer'
+  ];
+
+  const CONTAINER_SELECTORS = [
+    'ytd-watch-next-secondary-results-renderer',
+    'ytd-item-section-renderer',
+    'ytd-section-list-renderer',
+    'ytd-rich-grid-renderer',
+    'ytd-rich-grid-row',
+    'ytd-shelf-renderer',
+    'ytd-horizontal-list-renderer',
+    'ytd-reel-shelf-renderer',
+    'ytd-rich-section-renderer'
   ];
 
   let enabled = false;
@@ -34,25 +48,13 @@
   }
 
   function cardFor(badgeEl) {
-    const known = [];
-    const others = [];
     let el = badgeEl.parentElement;
     while (el && el !== document.documentElement) {
-      if (el.localName.startsWith('ytd-') && el.localName.endsWith('-renderer')) {
-        (CARD_SELECTORS.includes(el.localName) ? known : others).push(el);
-      }
+      if (CARD_SELECTORS.includes(el.localName)) return el;
+      if (CONTAINER_SELECTORS.includes(el.localName)) return null;
       el = el.parentElement;
     }
-    const pool = known.length ? known : others;
-    if (pool.length === 0) return null;
-
-    const promoted = pool.filter((m) =>
-      m.localName.includes('promoted') ||
-      m.localName.includes('ad-slot') ||
-      m.localName.includes('statement-banner')
-    );
-    if (promoted.length) return promoted[promoted.length - 1];
-    return pool[pool.length - 1];
+    return null;
   }
 
   function hideCard(card) {
