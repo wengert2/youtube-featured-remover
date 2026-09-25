@@ -17,7 +17,7 @@
     api.storage.local.set({ enabled: on });
   }
 
-  api.storage.local.get('enabled', (result) => {
+  api.storage.local.get('enabled').then((result) => {
     const on = !!result.enabled;
     toggle.checked = on;
     setStatus(on);

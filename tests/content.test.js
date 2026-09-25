@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-function makeChrome({ enabled = true } = {}) {
+const API_NAMES = ['chrome', 'browser'];
+
+function makeApi(name, { enabled = true } = {}) {
   const listeners = new Set();
   return {
     storage: {
       local: {
-        get(key, cb) {
-          cb({ enabled });
-        }
+        get: (key) => Promise.resolve({ enabled }),
+        set: (items) => Promise.resolve()
       },
       onChanged: {
         addListener(fn) {
@@ -21,13 +22,14 @@ function makeChrome({ enabled = true } = {}) {
   };
 }
 
-async function boot({ enabled = true, html = '' } = {}) {
+async function boot(name, { enabled = true, html = '' } = {}) {
   document.body.innerHTML = html;
-  const chrome = makeChrome({ enabled });
-  globalThis.chrome = chrome;
+  const api = makeApi(name, { enabled });
+  globalThis[name] = api;
   vi.resetModules();
   await import('../content.js');
-  return chrome;
+  await Promise.resolve();
+  return api;
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 250));
@@ -35,9 +37,11 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 250));
 afterEach(() => {
   document.body.innerHTML = '';
   delete globalThis.chrome;
+  delete globalThis.browser;
 });
 
-describe('content script', () => {
+for (const name of API_NAMES) {
+describe(`content script (${name})`, () => {
   it('hides only the featured card in a modern watch sidebar, not the whole list', async () => {
     const html = `
       <div id="secondary">
@@ -55,13 +59,13 @@ describe('content script', () => {
           </div>
         </ytd-watch-next-secondary-results-renderer>
       </div>`;
-    await boot({ html });
+    await boot(name, { html });
 
-    expect(document.getElementById('featured').style.display).toBe('none');
-    expect(document.getElementById('rec1').style.display).not.toBe('none');
-    expect(document.getElementById('rec2').style.display).not.toBe('none');
-    expect(document.querySelector('ytd-item-section-renderer').style.display).not.toBe('none');
-    expect(document.querySelector('ytd-watch-next-secondary-results-renderer').style.display).not.toBe('none');
+    expect(document.getElementById('featured')).toBeNull();
+    expect(document.getElementById('rec1')).not.toBeNull();
+    expect(document.getElementById('rec2')).not.toBeNull();
+    expect(document.querySelector('ytd-item-section-renderer')).not.toBeNull();
+    expect(document.querySelector('ytd-watch-next-secondary-results-renderer')).not.toBeNull();
   });
 
   it('hides a legacy compact promoted card in the sidebar', async () => {
@@ -74,14 +78,14 @@ describe('content script', () => {
           </ytd-compact-promoted-video-renderer>
         </ytd-item-section-renderer>
       </ytd-watch-next-secondary-results-renderer>`;
-    await boot({ html });
+    await boot(name, { html });
 
-    expect(document.getElementById('promoted').style.display).toBe('none');
-    expect(document.getElementById('recA').style.display).not.toBe('none');
-    expect(document.querySelector('ytd-item-section-renderer').style.display).not.toBe('none');
+    expect(document.getElementById('promoted')).toBeNull();
+    expect(document.getElementById('recA')).not.toBeNull();
+    expect(document.querySelector('ytd-item-section-renderer')).not.toBeNull();
   });
 
-  it('hides a promoted rich item on the home feed grid', async () => {
+  it('removes the whole featured cell on the home feed grid so the layout reflows', async () => {
     const html = `
       <ytd-rich-grid-renderer>
         <ytd-rich-item-renderer id="gridA">Video A</ytd-rich-item-renderer>
@@ -91,11 +95,34 @@ describe('content script', () => {
           </ytd-promoted-video-renderer>
         </ytd-rich-item-renderer>
       </ytd-rich-grid-renderer>`;
-    await boot({ html });
+    await boot(name, { html });
 
-    expect(document.getElementById('promoted').style.display).toBe('none');
-    expect(document.getElementById('gridA').style.display).not.toBe('none');
-    expect(document.getElementById('gridFeatured').style.display).not.toBe('none');
+    expect(document.getElementById('gridFeatured')).toBeNull();
+    expect(document.getElementById('gridA')).not.toBeNull();
+    expect(document.querySelector('ytd-rich-grid-renderer')).not.toBeNull();
+  });
+
+  it('removes the whole cell when a modern lockup nested inside a rich item is featured', async () => {
+    const html = `
+      <ytd-rich-grid-renderer>
+        <ytd-rich-item-renderer id="cellA">
+          <yt-lockup-view-model>Video A</yt-lockup-view-model>
+        </ytd-rich-item-renderer>
+        <ytd-rich-item-renderer id="cellFeatured">
+          <yt-lockup-view-model>
+            <span class="ytBadgeShapeText">YouTube Featured</span>Sponsored
+          </yt-lockup-view-model>
+        </ytd-rich-item-renderer>
+        <ytd-rich-item-renderer id="cellB">
+          <yt-lockup-view-model>Video B</yt-lockup-view-model>
+        </ytd-rich-item-renderer>
+      </ytd-rich-grid-renderer>`;
+    await boot(name, { html });
+
+    expect(document.getElementById('cellFeatured')).toBeNull();
+    expect(document.getElementById('cellA')).not.toBeNull();
+    expect(document.getElementById('cellB')).not.toBeNull();
+    expect(document.querySelector('ytd-rich-grid-renderer')).not.toBeNull();
   });
 
   it('does nothing when the badge sits at section level with no card below it', async () => {
@@ -106,11 +133,11 @@ describe('content script', () => {
           <yt-lockup-view-model id="recX">Video</yt-lockup-view-model>
         </ytd-item-section-renderer>
       </ytd-watch-next-secondary-results-renderer>`;
-    await boot({ html });
+    await boot(name, { html });
 
-    expect(document.getElementById('recX').style.display).not.toBe('none');
-    expect(document.querySelector('ytd-item-section-renderer').style.display).not.toBe('none');
-    expect(document.querySelector('ytd-watch-next-secondary-results-renderer').style.display).not.toBe('none');
+    expect(document.getElementById('recX')).not.toBeNull();
+    expect(document.querySelector('ytd-item-section-renderer')).not.toBeNull();
+    expect(document.querySelector('ytd-watch-next-secondary-results-renderer')).not.toBeNull();
   });
 
   it('does not hide a card whose badge does not match "YouTube Featured"', async () => {
@@ -122,13 +149,13 @@ describe('content script', () => {
           </yt-lockup-view-model>
         </ytd-item-section-renderer>
       </ytd-watch-next-secondary-results-renderer>`;
-    await boot({ html });
+    await boot(name, { html });
 
-    expect(document.getElementById('members').style.display).not.toBe('none');
+    expect(document.getElementById('members')).not.toBeNull();
   });
 
   it('hides a featured card added to the sidebar after load (MutationObserver path)', async () => {
-    await boot({ html: '<ytd-watch-next-secondary-results-renderer><ytd-item-section-renderer></ytd-item-section-renderer></ytd-watch-next-secondary-results-renderer>' });
+    await boot(name, { html: '<ytd-watch-next-secondary-results-renderer><ytd-item-section-renderer></ytd-item-section-renderer></ytd-watch-next-secondary-results-renderer>' });
 
     const card = document.createElement('yt-lockup-view-model');
     card.id = 'lateFeatured';
@@ -136,7 +163,7 @@ describe('content script', () => {
     document.querySelector('ytd-item-section-renderer').appendChild(card);
 
     await flush();
-    expect(document.getElementById('lateFeatured').style.display).toBe('none');
+    expect(document.getElementById('lateFeatured')).toBeNull();
   });
 
   it('restores hidden cards when toggled off and re-hides them when toggled back on', async () => {
@@ -147,23 +174,25 @@ describe('content script', () => {
           <yt-lockup-view-model id="rec">Video</yt-lockup-view-model>
         </ytd-item-section-renderer>
       </ytd-watch-next-secondary-results-renderer>`;
-    const chrome = await boot({ html, enabled: true });
+    const api = await boot(name, { html, enabled: true });
 
-    expect(document.getElementById('featured').style.display).toBe('none');
+    expect(document.getElementById('featured')).toBeNull();
 
-    chrome.setEnabled(false);
-    expect(document.getElementById('featured').style.display).not.toBe('none');
-    expect(document.getElementById('rec').style.display).not.toBe('none');
+    api.setEnabled(false);
+    expect(document.getElementById('featured')).not.toBeNull();
+    expect(document.getElementById('featured').parentElement).toBe(document.querySelector('ytd-item-section-renderer'));
+    expect(document.getElementById('rec')).not.toBeNull();
 
-    chrome.setEnabled(true);
-    expect(document.getElementById('featured').style.display).toBe('none');
+    api.setEnabled(true);
+    expect(document.getElementById('featured')).toBeNull();
   });
 
   it('does nothing at all when the extension is disabled at load', async () => {
     const html = `
       <yt-lockup-view-model id="featured"><span class="ytBadgeShapeText">YouTube Featured</span>Sponsored</yt-lockup-view-model>`;
-    await boot({ html, enabled: false });
+    await boot(name, { html, enabled: false });
 
-    expect(document.getElementById('featured').style.display).not.toBe('none');
+    expect(document.getElementById('featured')).not.toBeNull();
   });
 });
+}

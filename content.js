@@ -24,6 +24,7 @@
     'ytd-section-list-renderer',
     'ytd-rich-grid-renderer',
     'ytd-rich-grid-row',
+    'ytd-grid-renderer',
     'ytd-shelf-renderer',
     'ytd-horizontal-list-renderer',
     'ytd-reel-shelf-renderer',
@@ -31,7 +32,7 @@
   ];
 
   let enabled = false;
-  const hiddenCards = new Set();
+  const hiddenCards = new Map();
   let scanScheduled = false;
 
   function badgeText(el) {
@@ -49,23 +50,36 @@
 
   function cardFor(badgeEl) {
     let el = badgeEl.parentElement;
+    let card = null;
     while (el && el !== document.documentElement) {
-      if (CARD_SELECTORS.includes(el.localName)) return el;
-      if (CONTAINER_SELECTORS.includes(el.localName)) return null;
+      if (CARD_SELECTORS.includes(el.localName)) {
+        card = el;
+      } else if (CONTAINER_SELECTORS.includes(el.localName)) {
+        break;
+      }
       el = el.parentElement;
     }
-    return null;
+    return card;
   }
 
   function hideCard(card) {
     if (hiddenCards.has(card)) return;
-    hiddenCards.add(card);
-    card.style.setProperty('display', 'none', 'important');
+    hiddenCards.set(card, {
+      parent: card.parentElement,
+      nextSibling: card.nextSibling
+    });
+    card.remove();
   }
 
   function restoreCard(card) {
     if (!hiddenCards.has(card)) return;
-    card.style.removeProperty('display');
+    const { parent, nextSibling } = hiddenCards.get(card);
+    if (parent && parent.isConnected) {
+      const target =
+        nextSibling && nextSibling.isConnected ? nextSibling : null;
+      if (target) parent.insertBefore(card, target);
+      else parent.appendChild(card);
+    }
     hiddenCards.delete(card);
   }
 
@@ -86,7 +100,7 @@
     }, 120);
   }
 
-  api.storage.local.get('enabled', (result) => {
+  api.storage.local.get('enabled').then((result) => {
     enabled = !!result.enabled;
     if (enabled) scanDocument();
   });
@@ -99,7 +113,7 @@
       scanDocument();
     } else if (!on && enabled) {
       enabled = false;
-      for (const card of hiddenCards) restoreCard(card);
+      for (const card of [...hiddenCards.keys()]) restoreCard(card);
     }
   });
 
